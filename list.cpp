@@ -32,8 +32,6 @@ list_error_t ListCtor(list_type* list) {
     list->data[0] = DATA_POISON;
     list->next[0] = 0;
 
-    list->head = 0;
-    list->tail = 0;
     list->free = 1;
 
     const char* filename = "dump.htm";
@@ -57,8 +55,6 @@ list_error_t ListDtor(list_type* list) {
 
     fclose(list->file);
 
-    list->head = 0;
-    list->tail = 0;
     list->free = 0;
 
     list->capacity = 0;
@@ -85,7 +81,7 @@ void ListPrint(list_type* list) {
 
 //----------------------------------------------------------------------------------
 
-list_error_t ListPush(list_type* list, int position, list_elem_t value) {
+list_error_t ListPush(list_type* list, const int position, list_elem_t value) {
     if (list->size > list->capacity + 1) {
         return list_error_t::ERROR;
     } else if (list->size == list->capacity + 1) {
@@ -101,7 +97,7 @@ list_error_t ListPush(list_type* list, int position, list_elem_t value) {
         pref_addr = list->pref[position];
         next_addr = position;
     } else {
-        pref_addr = list->tail;
+        pref_addr = list->pref[0];
         next_addr = 0;
     }
 
@@ -111,20 +107,12 @@ list_error_t ListPush(list_type* list, int position, list_elem_t value) {
     list->next[list->free] = next_addr;
 
     // перезапись next предыдущего
-    if (pref_addr > 0) {
-        list->next[pref_addr] = list->free;
-        push.posY1 = pref_addr;
-    } else {
-        list->head = list->free;
-    }
+    list->next[pref_addr] = list->free;
+    push.posY1 = pref_addr;
 
     // перезапись pref прошлого
-    if (next_addr > 0) {
-        list->pref[next_addr] = list->free;
-        push.posY2 = next_addr;
-    } else {
-        list->tail = position;
-    }
+    list->pref[next_addr] = list->free;
+    push.posY2 = next_addr;
 
     list->size++;
     FindFree(list);
@@ -136,9 +124,8 @@ list_error_t ListPush(list_type* list, int position, list_elem_t value) {
 
 //----------------------------------------------------------------------------------
 
-list_error_t ListPop(list_type* list, int position, list_elem_t* value) {
-
-    if (position < 1 || position > list->tail || list->size == 0) {
+list_error_t ListPop(list_type* list, const int position, list_elem_t* value) {
+    if (position < 1 || position > list->pref[0] || list->size == 0) {
         return list_error_t::ERROR;
     }
     if (list->data[position] == DATA_POISON) {
@@ -157,20 +144,12 @@ list_error_t ListPop(list_type* list, int position, list_elem_t* value) {
     list->next[position] = INDX_POISON;
 
     // перезапись next предыдущего
-    if (pref_addr > 0) {
-        list->next[pref_addr] = next_addr;
-        pop.posY1 = pref_addr;
-    } else {
-        list->head = next_addr;
-    }
+    list->next[pref_addr] = next_addr;
+    pop.posY1 = pref_addr;
 
     // перезапись pref следующего
-    if (next_addr > 0) {
-        list->pref[next_addr] = pref_addr;
-        pop.posY2 = next_addr;
-    } else {
-        list->tail = pref_addr;
-    }
+    list->pref[next_addr] = pref_addr;
+    pop.posY2 = next_addr;
 
     list->size--;
     FindFree(list);
@@ -307,6 +286,10 @@ void ListLog(list_type* list, const char* func, FILE* file, pos_color* positions
                             "<td style=\"padding: 8px; border: 1px solid #ddd;\">%d</td>"
                         "</tr>\n"
                         "<tr>"
+                            "<td style=\"padding: 8px; border: 1px solid #ddd; font-weight: bold;\">SIZE</td>"
+                            "<td style=\"padding: 8px; border: 1px solid #ddd;\">%zu</td>"
+                        "</tr>\n"
+                        "<tr style=\"background: #e9ecef;\">"
                             "<td style=\"padding: 8px; border: 1px solid #ddd; font-weight: bold;\">CAPACITY</td>"
                             "<td style=\"padding: 8px; border: 1px solid #ddd;\">%zu</td>"
                         "</tr>\n"
@@ -322,9 +305,10 @@ void ListLog(list_type* list, const char* func, FILE* file, pos_color* positions
         "</div>\n\n",
         list->dump_count,
         func,
-        list->head,
-        list->tail,
+        list->next[0],
+        list->pref[0],
         list->free,
+        list->size,
         list->capacity,
         list->dump_count++,
         filename_dot);

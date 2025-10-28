@@ -19,12 +19,5 @@ int main (void) {
     ListPush(&lst, 6, 60);
     ListPush(&lst, 6, 59);
 
-    ListPop(&lst, 1, &value);
-    PRINT_LIST_ELEMENT(0, value, 0);
-    ListPop(&lst, 3, &value);
-    PRINT_LIST_ELEMENT(0, value, 0);
-    ListPop(&lst, 5, &value);
-    PRINT_LIST_ELEMENT(0, value, 0);
-
     return 0;
 }

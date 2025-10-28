@@ -14,8 +14,7 @@ typedef enum class ListErrors : char {
 } list_error_t;
 
 typedef struct List {
-    int head = 0;
-    int tail = 0;
+
     int free = 0;
 
     size_t size     = 0;
@@ -32,8 +31,8 @@ typedef struct List {
 list_error_t ListCtor(list_type* list);
 list_error_t ListDtor(list_type* list);
 
-list_error_t ListPush(list_type* list, int position, list_elem_t value);
-list_error_t ListPop(list_type* list, int position, list_elem_t* value);
+list_error_t ListPush(list_type* list, const int position, list_elem_t value);
+list_error_t ListPop(list_type* list, const int position, list_elem_t* value);
 
 void ListPrint(list_type* list);
 
