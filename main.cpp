@@ -8,6 +8,7 @@
 
 int main (void) {
     list_elem_t value = DATA_POISON;
+
     MAKE_LIST(lst);
 
     ListPush(&lst, 1, 10);
@@ -16,6 +17,8 @@ int main (void) {
     ListPush(&lst, 4, 40);
     ListPush(&lst, 5, 50);
     ListPush(&lst, 6, 60);
+    ListPush(&lst, 6, 59);
+
     ListPop(&lst, 1, &value);
     PRINT_LIST_ELEMENT(0, value, 0);
     ListPop(&lst, 3, &value);

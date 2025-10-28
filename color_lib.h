@@ -13,6 +13,13 @@
 #define CYAN    "\033[36m"
 #define GREY    "\033[37m"
 
+typedef struct ColorPos {
+    int posR  = 0;
+    int posG  = 0;
+    int posY1 = 0;
+    int posY2 = 0;
+} pos_color;
+
 #define PRINT_COLOR(color, arg) printf(color arg BASE)
 #define PRINT_COLOR_VAR(color, arg, ...) printf(color arg BASE, __VA_ARGS__)
 

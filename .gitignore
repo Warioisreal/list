@@ -5,4 +5,4 @@ binary_file_debug
 *.o
 *.a
 *.htm
-*.png
+*.svg

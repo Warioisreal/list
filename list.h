@@ -26,6 +26,7 @@ typedef struct List {
     int* next         = nullptr;
 
     FILE* file = nullptr;
+    size_t dump_count = 0;
 } list_type;
 
 list_error_t ListCtor(list_type* list);

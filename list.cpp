@@ -2,6 +2,7 @@
 #include <stdlib.h>
 
 #include "define_lib.h"
+#include "color_lib.h"
 #include "list.h"
 
 #define ARRAY_REALLOC_AND_RETURN(TYPE, array, size) BEGIN {\
@@ -15,7 +16,7 @@ static void FillDataPoison(list_elem_t* data, size_t size);
 static void FillIndxPoison(int* indx_array, size_t size);
 static void FindFree(list_type* list);
 static list_error_t ListSafeAllocationMemory(list_type* list, size_t new_capacity);
-void ListLog(list_type* list, const char* func, const int value, FILE* file);
+void ListLog(list_type* list, const char* func, FILE* file, pos_color* positions);
 
 
 list_error_t ListCtor(list_type* list) {
@@ -42,6 +43,10 @@ list_error_t ListCtor(list_type* list) {
         return list_error_t::ERROR;
     }
     list->file = file;
+
+    system("rm -r log_folder");
+    system("mkdir log_folder");
+    list->dump_count = 1;
 
     return list_error_t::OK;
 }
@@ -90,6 +95,8 @@ list_error_t ListPush(list_type* list, int position, list_elem_t value) {
     int pref_addr = 0;
     int next_addr = 0;
 
+    pos_color push = {INDX_POISON, list->free, INDX_POISON, INDX_POISON};
+
     if (list->data[position] != DATA_POISON) {
         pref_addr = list->pref[position];
         next_addr = position;
@@ -97,35 +104,32 @@ list_error_t ListPush(list_type* list, int position, list_elem_t value) {
         pref_addr = list->tail;
         next_addr = 0;
     }
-    //printf("%zu | %d\n", position, value);
-    //printf("%d | %d\n", pref_addr, next_addr);
-    //printf("%-5d | %-5d | %-5d\n", list->pref[list->free], list->data[list->free], list->next[list->free]);
 
     // запись нового
     list->pref[list->free] = pref_addr;
     list->data[list->free] = value;
     list->next[list->free] = next_addr;
 
-    //printf("%-5d | %-5d | %-5d\n", list->pref[list->free], list->data[list->free], list->next[list->free]);
-
     // перезапись next предыдущего
     if (pref_addr > 0) {
-        list->next[pref_addr] = position;
+        list->next[pref_addr] = list->free;
+        push.posY1 = pref_addr;
     } else {
-        list->head = position;
+        list->head = list->free;
     }
 
     // перезапись pref прошлого
     if (next_addr > 0) {
-        list->pref[next_addr] = position;
+        list->pref[next_addr] = list->free;
+        push.posY2 = next_addr;
     } else {
         list->tail = position;
     }
 
     list->size++;
     FindFree(list);
-    //printf("%d | %d | %d\n", list->head, list->tail, list->free);
-    ListLog(list, "PUSH", position, list->file);
+
+    ListLog(list, "PUSH", list->file, &push);
 
     return list_error_t::OK;
 }
@@ -145,6 +149,8 @@ list_error_t ListPop(list_type* list, int position, list_elem_t* value) {
     int next_addr = list->next[position];
     *value = list->data[position];
 
+    pos_color pop = {position, INDX_POISON, INDX_POISON, INDX_POISON};
+
     // удаление элемента с позицией pos
     list->pref[position] = INDX_POISON;
     list->data[position] = DATA_POISON;
@@ -153,6 +159,7 @@ list_error_t ListPop(list_type* list, int position, list_elem_t* value) {
     // перезапись next предыдущего
     if (pref_addr > 0) {
         list->next[pref_addr] = next_addr;
+        pop.posY1 = pref_addr;
     } else {
         list->head = next_addr;
     }
@@ -160,13 +167,15 @@ list_error_t ListPop(list_type* list, int position, list_elem_t* value) {
     // перезапись pref следующего
     if (next_addr > 0) {
         list->pref[next_addr] = pref_addr;
+        pop.posY2 = next_addr;
     } else {
         list->tail = pref_addr;
     }
 
     list->size--;
     FindFree(list);
-    ListLog(list, "POP", position, list->file);
+
+    ListLog(list, "POP", list->file, &pop);
 
     return list_error_t::OK;
 }
@@ -190,6 +199,7 @@ static void FillIndxPoison(int* indx_array, size_t size) {
 //----------------------------------------------------------------------------------
 
 static void FindFree(list_type* list) {
+    //list->free = list->next[list->free];
     for (size_t pos = 1; pos <= list->capacity; pos++) {
         if (list->data[pos] == DATA_POISON) {
             list->free = (int)pos;
@@ -218,9 +228,9 @@ static list_error_t ListSafeAllocationMemory(list_type* list, size_t new_capacit
 
 //----------------------------------------------------------------------------------
 
-void ListLog(list_type* list, const char* func, const int value, FILE* file) {
+void ListLog(list_type* list, const char* func, FILE* file, pos_color* positions) {
     char filename_dot[100] = "";
-    snprintf(filename_dot, 100, "log_folder/push_dot_%s_%d.txt", func, value);
+    snprintf(filename_dot, 100, "log_folder/push_dot_%zu.txt", list->dump_count);
     FILE* file_dot = fopen(filename_dot, "wb");
     fprintf(file_dot,
         "digraph G{\n"
@@ -228,28 +238,32 @@ void ListLog(list_type* list, const char* func, const int value, FILE* file) {
         "rankdir=LR;\n"
         "ordering=out;\n");
 
-    //size_t color    = #808080;
-    //size_t bg_color = #c0c0c0;
+    unsigned int color    = 0;
+    unsigned int bg_color = 0;
 
     for (size_t pos = 0; pos < list->capacity + 1; pos++) {
-        /*if (pos == posG) {
-            color    = #008000;
-            bg_color = #00c000;
+        if (pos == (size_t)positions->posG) {
+            color    = 0x00c000;
+            bg_color = 0xa0f0a0;
         } else
-        if (pos == posR) {
-            color    = #800000;
-            bg_color = #c00000;
+        if (pos == (size_t)positions->posR) {
+            color    = 0xc00000;
+            bg_color = 0xf0a0a0;
         } else
-        if (pos == posY) {
-            color    = #808000;
-            bg_color = #c0c000;
+        if (pos == (size_t)positions->posY1 || pos == (size_t)positions->posY2) {
+            color    = 0xc0c000;
+            bg_color = 0xf0f0a0;
+        } else
+        if (list->data[pos] != DATA_POISON) {
+            color    = 0xc0f0c0;
+            bg_color = 0xe0f0e0;
+        } else {
+            color    = 0x808080;
+            bg_color = 0xc0c0c0;
         }
         fprintf(file_dot,
-            "element%zu [color=\"%zu\", bgcolor=\"%zu\", label=\" pos: %zu | <pref> %d | %d | <next> %d \"];\n",
-            pos, color, bg_color, pos, list->pref[pos], list->data[pos], list->next[pos]);*/
-        fprintf(file_dot,
-            "element%zu [label=\" pos: %zu | <pref> %d | %d | <next> %d \"];\n",
-            pos, pos, list->pref[pos], list->data[pos], list->next[pos]);
+            "element%zu [color=\"#%06X\", fillcolor=\"#%06X\", label=\" pos: %zu | <pref> %d | %d | <next> %d \"];\n",
+            pos, color, bg_color, pos, list->pref[pos], list->data[pos], list->next[pos]);
     }
 
     for (size_t pos = 0; pos < list->capacity; pos++) {
@@ -269,13 +283,13 @@ void ListLog(list_type* list, const char* func, const int value, FILE* file) {
     fclose(file_dot);
 
     char command[100] = "";
-    snprintf(command, 100, "dot -Tsvg log_folder/push_dot_%s_%d.txt -o log_folder/push_dot_%s_%d.svg", func, value, func, value);
+    snprintf(command, 100, "dot -Tsvg log_folder/push_dot_%zu.txt -o log_folder/push_dot_%zu.svg", list->dump_count, list->dump_count);
     system(command);
 
     fprintf(file,
         "<pre>\n"
         "<div style=\"margin: 20px; padding: 15px; border: 2px solid #4CAF50; border-radius: 10px; background: #f8f9fa; box-shadow: 0 4px 8px rgba(0,0,0,0.1);\">\n"
-            "<h2 style=\"color: #2E86AB; margin-top: 0;\">List Debug %s %d</h2>\n"
+            "<h2 style=\"color: #2E86AB; margin-top: 0;\">List Debug %zu %s</h2>\n"
             "<div style=\"display: table;\">\n"
                 "<div style=\"width: 20%%;\">\n"
                     "<h3 style=\"color: #A23B72;\">Parameters</h3>\n"
@@ -300,18 +314,19 @@ void ListLog(list_type* list, const char* func, const int value, FILE* file) {
                 "</div>\n"
                 "<div style=\"min-width: 40%%;\">\n"
                     "<h3 style=\"color: #A23B72;\">Visualization</h3>\n"
-                    "<img src=\"log_folder/push_dot_%s_%d.svg\" style=\"max-width: 100%%; height: auto; border: 1px solid #ddd; border-radius: 5px;\" alt=\"List visualization\">\n"
+                    "<img src=\"log_folder/push_dot_%zu.svg\" style=\"max-width: 100%%; height: auto; border: 1px solid #ddd; border-radius: 5px;\" alt=\"List visualization\">\n"
                 "</div>\n"
             "</div>\n"
             "<hr style=\"margin: 15px 0; border: 0; border-top: 1px solid #ccc;\">\n"
             "<small style=\"color: #666;\">Generated from: %s</small>\n"
         "</div>\n\n",
-        func, value,
+        list->dump_count,
+        func,
         list->head,
         list->tail,
         list->free,
         list->capacity,
-        func, value,
+        list->dump_count++,
         filename_dot);
 
 }
