@@ -1,26 +1,37 @@
 #ifndef _LIST_H_
 #define _LIST_H_
 
+#include <stdio.h>
+
 typedef int list_elem_t;
 
 const int DATA_POISON = -1;
 const int INDX_POISON = -1;
 
-#define PRINT_LIST_ELEMENT(pref, elem, next) printf("%d | %d | %d\n", pref, elem, next)
+const size_t DEFAULT_CTOR_CAPACITY = 1;
+
+const size_t LIST_NAME_SIZE = 100;
 
 typedef enum class ListErrors : char {
-    OK    = 0,
-    ERROR = 1
+    OK = 0,
+    ALLOCATION_ERROR  = 1,
+    INVALID_POSITION  = 2,
+    LIST_EMPTY        = 3,
+    POSITION_OCCUPIED = 4,
+    POSITION_FREE     = 5,
+    FILE_OPEN_ERROR   = 6,
+    LIST_CORRUPTED    = 7
 } list_error_t;
 
 typedef struct List {
+    char name[LIST_NAME_SIZE] = "";
 
     int free = 0;
 
     size_t size     = 0;
     size_t capacity = 0;
 
-    int* pref         = nullptr;
+    int* prev         = nullptr;
     list_elem_t* data = nullptr;
     int* next         = nullptr;
 
@@ -28,12 +39,4 @@ typedef struct List {
     size_t dump_count = 0;
 } list_type;
 
-list_error_t ListCtor(list_type* list);
-list_error_t ListDtor(list_type* list);
-
-list_error_t ListPush(list_type* list, const int position, list_elem_t value);
-list_error_t ListPop(list_type* list, const int position, list_elem_t* value);
-
-void ListPrint(list_type* list);
-
-#endif // _LIST_H_
+#endif //_LIST_H_
