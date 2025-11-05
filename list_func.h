@@ -7,7 +7,7 @@
 #include "list.h"
 
 
-#define PRINT_LIST_ELEMENT(pref, elem, next) printf("%d | %d | %d\n", pref, elem, next)
+#define PRINT_LIST_ELEMENT(prev, elem, next) printf("%d | %d | %d\n", prev, elem, next)
 
 #define MAKE_LIST(name) list_type name = {}; \
                         char full_folder_name[LOG_FOLDER_NAME_SIZE] = ""; \
@@ -27,6 +27,6 @@ list_error_t ListInsertBefore(list_type* list, const int position, const list_el
 list_error_t ListInsertAfter(list_type* list, const int position, const list_elem_t value);
 list_error_t ListRemove(list_type* list, const int position, list_elem_t* value);
 
-void ListPrint(list_type* list);
+void ListPrint(list_type* list, const char* message);
 
 #endif //_LIST_FUNC_H_
