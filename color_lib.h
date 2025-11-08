@@ -14,10 +14,10 @@
 #define GREY    "\033[37m"
 
 typedef struct ColorPos {
-    int posR  = 0;
-    int posG  = 0;
-    int posY1 = 0;
-    int posY2 = 0;
+    ssize_t posR  = 0;
+    ssize_t posG  = 0;
+    ssize_t posY1 = 0;
+    ssize_t posY2 = 0;
 } pos_color;
 
 #define PRINT_COLOR(color, arg) printf(color arg BASE)

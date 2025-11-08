@@ -39,21 +39,50 @@ static const char* ListErrorsArray[11] = {
     "LIST_SIZE_ERROR",
     "INVALID_ELEMENT"
 };
-
-typedef struct List {
+/*
+typedef struct ListSoA {
     char name[LIST_NAME_SIZE] = "";
 
-    int free = 0;
+    ssize_t free = 0;
 
     size_t size     = 0;
     size_t capacity = 0;
 
-    int* prev         = nullptr;
+    ssize_t* prev     = nullptr;
     list_elem_t* data = nullptr;
-    int* next         = nullptr;
+    ssize_t* next     = nullptr;
 
     FILE* file = nullptr;
     size_t dump_count = 0;
 } list_type;
+*/
+typedef struct ListElement {
+    ssize_t prev      = INDX_POISON;
+    list_elem_t value = DATA_POISON;
+    ssize_t next      = INDX_POISON;
+} list_data_type;
+
+typedef struct ListAoS {
+    char name[LIST_NAME_SIZE] = "";
+
+    ssize_t free = 0;
+
+    size_t size     = 0;
+    size_t capacity = 0;
+
+    list_data_type* data = nullptr;
+
+    FILE* file = nullptr;
+    size_t dump_count = 0;
+} list_type;
+
+
+void UpdatePrev(list_type* list,  const ssize_t pos, const ssize_t     new_addr);
+void UpdateValue(list_type* list, const ssize_t pos, const list_elem_t new_value);
+void UpdateNext(list_type* list,  const ssize_t pos, const ssize_t     new_addr);
+
+ssize_t     GetPrev(list_type* list,  const ssize_t pos);
+list_elem_t GetValue(list_type* list, const ssize_t pos);
+ssize_t     GetNext(list_type* list,  const ssize_t pos);
 
 #endif //_LIST_H_

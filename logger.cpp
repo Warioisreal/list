@@ -45,16 +45,16 @@ void ListLog(list_type* list, const char* message, FILE* file, pos_color* positi
     unsigned int color    = 0;
     unsigned int bg_color = 0;
 
-    for (size_t pos = 0; pos < list->capacity + 1; pos++) {
-        if (pos == (size_t)positions->posG) {
+    for (ssize_t pos = 0; pos < (ssize_t)list->capacity + 1; pos++) {
+        if (pos == positions->posG) {
             color    = 0x00c000;
             bg_color = 0xa0f0a0;
         } else
-        if (pos == (size_t)positions->posR) {
+        if (pos == positions->posR) {
             color    = 0xc00000;
             bg_color = 0xf0a0a0;
         } else
-        if (pos == (size_t)positions->posY1 || pos == (size_t)positions->posY2) {
+        if (pos == positions->posY1 || pos == positions->posY2) {
             color    = 0xc0c000;
             bg_color = 0xf0f0a0;
         } else
@@ -62,7 +62,7 @@ void ListLog(list_type* list, const char* message, FILE* file, pos_color* positi
             color    = 0x0000c0;
             bg_color = 0xa0a0f0;
         } else
-        if (list->data[pos] != DATA_POISON) {
+        if (GetValue(list, pos) != DATA_POISON) {
             color    = 0xa0c0a0;
             bg_color = 0xe0f0e0;
         } else {
@@ -71,13 +71,13 @@ void ListLog(list_type* list, const char* message, FILE* file, pos_color* positi
         }
 
         char extra_label[DOT_PARAMS_SIZE] = "";
-        if (list->next[0] != INDX_POISON && pos == (size_t)list->next[0]) {
+        if (pos == GetNext(list, 0)) {
             snprintf(extra_label, 100, "%s%s", extra_label, "HEAD | ");
         }
-        if (list->prev[0] != INDX_POISON && pos == (size_t)list->prev[0]) {
+        if (pos == GetPrev(list, 0)) {
             snprintf(extra_label, 100, "%s%s", extra_label, "TAIL | ");
         }
-        if (list->free != INDX_POISON && pos == (size_t)list->free) {
+        if (pos == list->free) {
             snprintf(extra_label, 100, "%s%s", extra_label, "FREE | ");
         }
 
@@ -85,64 +85,65 @@ void ListLog(list_type* list, const char* message, FILE* file, pos_color* positi
         snprintf(
             params,
             300,
-            "color=\"#%06X\", fillcolor=\"#%06X\", penwidth=\"2\", label=\"%s index = %zu | value = %d | {prev = %d | next = %d}\"",
+            "color=\"#%06X\", fillcolor=\"#%06X\", penwidth=\"2\", label=\"%s index = %zd | value = %d | {prev = %zd | next = %zd}\"",
             color,
             bg_color,
             extra_label,
             pos,
-            list->data[pos],
-            list->prev[pos],
-            list->next[pos]);
+            GetValue(list, pos),
+            GetPrev(list, pos),
+            GetNext(list, pos));
         MakeDotElement(file_dot, pos, params);
     }
 
-    for (size_t pos = 0; pos < list->capacity; pos++) {
-        MakeDotElementConnection(file_dot, pos, (int)(pos + 1), "style=invis, weight=100");
+    for (ssize_t pos = 0; pos < (ssize_t)list->capacity; pos++) {
+        MakeDotElementConnection(file_dot, pos, pos + 1, "style=invis, weight=100");
     }
 
-    for (size_t pos = 1; pos < list->capacity + 1; pos++) {
+    for (ssize_t pos = 1; pos < (ssize_t)list->capacity + 1; pos++) {
         // draw prev and next
-        if (list->data[pos] != DATA_POISON && \
-            list->next[pos] != INDX_POISON && \
-            list->data[list->next[pos]] != DATA_POISON && \
-            pos == (size_t)list->prev[list->next[pos]])
+
+        if (GetValue(list, pos) != DATA_POISON && \
+            GetNext(list, pos) != INDX_POISON && \
+            GetValue(list, GetNext(list, pos)) != DATA_POISON && \
+            pos == GetPrev(list, GetNext(list, pos)))
         {
-            MakeDotElementConnection(file_dot, pos, list->next[pos], "constraint=false, weight=0, color=\"#000000\", dir=both");
+            MakeDotElementConnection(file_dot, pos, GetNext(list, pos), "constraint=false, weight=0, color=\"#000000\", dir=both");
         }
         // draw prev xor next
-        if ((((size_t)list->next[list->prev[pos]] != pos) != \
-            (pos != (size_t)list->prev[list->next[pos]])) || \
-            list->prev[pos] == 0 || \
-            list->prev[pos] > (int)list->capacity || \
-            list->next[pos] == 0 || \
-            list->next[pos] > (int)list->capacity)
+        if (((GetNext(list, GetPrev(list, pos)) != pos) != \
+            (pos != GetPrev(list, GetNext(list, pos)))) || \
+            GetPrev(list, pos) == 0 || \
+            GetPrev(list, pos) > (int)list->capacity || \
+            GetNext(list, pos) == 0 || \
+            GetNext(list, pos) > (int)list->capacity)
         {
             // draw prev
-            if (list->prev[pos] != INDX_POISON && (list->prev[pos] == 0 || (pos != (size_t)list->next[list->prev[pos]])) && list->data[pos] != DATA_POISON) {
-                MakeDotElementConnection(file_dot, pos, list->prev[pos], "constraint=false, weight=0, color=\"#0000ff\"");
-                if (list->prev[pos] > (int)list->capacity) {
+            if (GetPrev(list, pos) != INDX_POISON && (GetPrev(list, pos) == 0 || (pos != GetNext(list, GetPrev(list, pos)))) && GetValue(list, pos) != DATA_POISON) {
+                MakeDotElementConnection(file_dot, pos, GetPrev(list, pos), "constraint=false, weight=0, color=\"#0000ff\"");
+                if (GetPrev(list, pos) > (int)list->capacity) {
                     char params[300] = "";
-                    snprintf(params, 300, "shape=\"octagon\", color=\"#ff0000\", fillcolor=\"#ffc0c0\", penwidth=\"2\", label=\" pos: %d \"", list->prev[pos]);
-                    MakeDotElement(file_dot, (size_t)list->prev[pos], params);
+                    snprintf(params, 300, "shape=\"octagon\", color=\"#ff0000\", fillcolor=\"#ffc0c0\", penwidth=\"2\", label=\" pos: %zd \"", GetPrev(list, pos));
+                    MakeDotElement(file_dot, GetPrev(list, pos), params);
                 }
             }
             // draw next
-            if (list->next[pos] != INDX_POISON && (list->next[pos] == 0 || (pos != (size_t)list->prev[list->next[pos]])) && list->data[pos] != DATA_POISON) {
-                MakeDotElementConnection(file_dot, pos, list->next[pos], "constraint=false, weight=0, color=\"#ff0000\"");
-                if (list->next[pos] > (int)list->capacity) {
+            if (GetNext(list, pos) != INDX_POISON && (GetNext(list, pos) == 0 || (pos != GetPrev(list, GetNext(list, pos)))) && GetValue(list, pos) != DATA_POISON) {
+                MakeDotElementConnection(file_dot, pos, GetNext(list, pos), "constraint=false, weight=0, color=\"#ff0000\"");
+                if (GetNext(list, pos) > (int)list->capacity) {
                     char params[300] = "";
-                    snprintf(params, 300, "shape=\"octagon\", color=\"#ff0000\", fillcolor=\"#ffc0c0\", penwidth=\"2\", label=\" pos: %d \"", list->next[pos]);
-                    MakeDotElement(file_dot, (size_t)list->next[pos], params);
+                    snprintf(params, 300, "shape=\"octagon\", color=\"#ff0000\", fillcolor=\"#ffc0c0\", penwidth=\"2\", label=\" pos: %zd \"", GetNext(list, pos));
+                    MakeDotElement(file_dot, GetNext(list, pos), params);
                 }
             }
         }
         // draw free
-        if (list->next[pos] != INDX_POISON && list->data[pos] == DATA_POISON) {
-            MakeDotElementConnection(file_dot, pos, list->next[pos], "constraint=false, weight=0, color=\"#00ff00\"");
-            if (list->next[pos] > (int)list->capacity) {
+        if (GetNext(list, pos) != INDX_POISON && GetValue(list, pos) == DATA_POISON) {
+            MakeDotElementConnection(file_dot, pos, GetNext(list, pos), "constraint=false, weight=0, color=\"#00ff00\"");
+            if (GetNext(list, pos) > (ssize_t)list->capacity) {
                 char params[300] = "";
-                snprintf(params, 300, "shape=\"octagon\", color=\"#ff0000\", fillcolor=\"#ffc0c0\", penwidth=\"2\", label=\" pos: %d \"", list->next[pos]);
-                MakeDotElement(file_dot, (size_t)list->next[pos], params);
+                snprintf(params, 300, "shape=\"octagon\", color=\"#ff0000\", fillcolor=\"#ffc0c0\", penwidth=\"2\", label=\" pos: %zd \"", GetNext(list, pos));
+                MakeDotElement(file_dot, GetNext(list, pos), params);
             }
         }
     }
@@ -163,15 +164,15 @@ void ListLog(list_type* list, const char* message, FILE* file, pos_color* positi
                     "<table style=\"width: 100%%; border-collapse: collapse;\">\n"
                         "<tr style=\"background: #e9ecef;\">"
                             "<td style=\"padding: 8px; border: 1px solid #ddd; font-weight: bold;\">HEAD</td>"
-                            "<td style=\"padding: 8px; border: 1px solid #ddd;\">%d</td>"
+                            "<td style=\"padding: 8px; border: 1px solid #ddd;\">%zd</td>"
                         "</tr>\n"
                         "<tr>"
                             "<td style=\"padding: 8px; border: 1px solid #ddd; font-weight: bold;\">TAIL</td>"
-                            "<td style=\"padding: 8px; border: 1px solid #ddd;\">%d</td>"
+                            "<td style=\"padding: 8px; border: 1px solid #ddd;\">%zd</td>"
                         "</tr>\n"
                         "<tr style=\"background: #e9ecef;\">"
                             "<td style=\"padding: 8px; border: 1px solid #ddd; font-weight: bold;\">FREE</td>"
-                            "<td style=\"padding: 8px; border: 1px solid #ddd;\">%d</td>"
+                            "<td style=\"padding: 8px; border: 1px solid #ddd;\">%zd</td>"
                         "</tr>\n"
                         "<tr>"
                             "<td style=\"padding: 8px; border: 1px solid #ddd; font-weight: bold;\">SIZE</td>"
@@ -186,8 +187,8 @@ void ListLog(list_type* list, const char* message, FILE* file, pos_color* positi
         list->name,
         list->dump_count,
         message,
-        list->next[0],
-        list->prev[0],
+        GetNext(list, 0),
+        GetPrev(list, 0),
         list->free,
         list->size,
         list->capacity);
@@ -210,11 +211,11 @@ void ListLog(list_type* list, const char* message, FILE* file, pos_color* positi
 
     // data
     fprintf(file, "value: |");
-    for (size_t i = 0; i <= list->capacity; i++) {
-        if (list->data[i] == DATA_POISON) {
+    for (ssize_t i = 0; i <= (ssize_t)list->capacity; i++) {
+        if (GetValue(list, i) == DATA_POISON) {
             fprintf(file, " %10s |", "poison");
         } else {
-            fprintf(file, " %10d |", list->data[i]);
+            fprintf(file, " %10d |", GetValue(list, i));
         }
     } fprintf(file, "\n");
 
@@ -225,11 +226,11 @@ void ListLog(list_type* list, const char* message, FILE* file, pos_color* positi
 
     // prev
     fprintf(file, " prev: |");
-    for (size_t i = 0; i <= list->capacity; i++) {
-        if (list->prev[i] == INDX_POISON) {
+    for (ssize_t i = 0; i <= (ssize_t)list->capacity; i++) {
+        if (GetPrev(list, i) == INDX_POISON) {
             fprintf(file, " %10s |", "poison");
         } else {
-            fprintf(file, " %10d |", list->prev[i]);
+            fprintf(file, " %10zd |", GetPrev(list, i));
         }
     } fprintf(file, "\n");
 
@@ -240,11 +241,11 @@ void ListLog(list_type* list, const char* message, FILE* file, pos_color* positi
 
     // next
     fprintf(file, " next: |");
-    for (size_t i = 0; i <= list->capacity; i++) {
-        if (list->next[i] == INDX_POISON) {
+    for (ssize_t i = 0; i <= (ssize_t)list->capacity; i++) {
+        if (GetNext(list, i) == INDX_POISON) {
             fprintf(file, " %10s |", "poison");
         } else {
-            fprintf(file, " %10d |", list->next[i]);
+            fprintf(file, " %10zd |", GetNext(list, i));
         }
     } fprintf(file, "\n");
 

@@ -12,6 +12,8 @@ int main (void) {
     UT3();
     UT4();
     UT5();
+    UT6();
+    UT7();
 
     return 0;
 }

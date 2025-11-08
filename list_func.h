@@ -7,7 +7,7 @@
 #include "list.h"
 
 
-#define PRINT_LIST_ELEMENT(prev, elem, next) printf("%d | %d | %d\n", prev, elem, next)
+#define PRINT_LIST_ELEMENT(prev, elem, next) printf("%lld | %d | %lld\n", prev, elem, next)
 
 #define MAKE_LIST(name) list_type name = {}; \
                         char full_folder_name[LOG_FOLDER_NAME_SIZE] = ""; \
@@ -18,14 +18,15 @@
 list_error_t ListCtor(list_type* list, const char* name);
 list_error_t ListDtor(list_type* list);
 
-list_error_t ListChangeCapacity(list_type* list, const size_t new_capacity);
+list_error_t ListLinearize(list_type* list);
 
-int ListGetHead(list_type* list);
-int ListGetTail(list_type* list);
+ssize_t ListGetHead(list_type* list);
+ssize_t ListGetTail(list_type* list);
 
-list_error_t ListInsertBefore(list_type* list, const int position, const list_elem_t value);
-list_error_t ListInsertAfter(list_type* list, const int position, const list_elem_t value);
-list_error_t ListRemove(list_type* list, const int position, list_elem_t* value);
+list_error_t ListInsertBefore(list_type* list, const ssize_t position, const list_elem_t value);
+list_error_t ListInsertAfter(list_type* list,  const ssize_t position, const list_elem_t value);
+
+list_error_t ListRemove(list_type* list, const ssize_t position, list_elem_t* value);
 
 void ListPrint(list_type* list, const char* message);
 

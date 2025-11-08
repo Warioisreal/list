@@ -12,7 +12,7 @@
 } END
 
 #define LIST_VERIFY_AND_RETURN(list, pos, pos1, pos2, check_pos, check_size, message) BEGIN { \
-    int position_ = pos; \
+    ssize_t position_ = pos; \
     list_error_t error_ = ListVerify(list, &position_, pos1, pos2, check_pos, check_size); \
     if (error_ != list_error_t::OK) { \
         ListDump(list, error_, position_, message); \
@@ -20,12 +20,12 @@
     } \
 } END
 
-static void FillListPoison(list_type* list, const size_t start, const size_t end);
+static void FillListPoison(list_type* list, const ssize_t start, const ssize_t end);
 static void FindFree(list_type* list);
-static void AddFree(list_type* list, const int position);
+static void AddFree(list_type* list, const ssize_t position);
 static list_error_t ListSafeAllocationMemory(list_type* list, const size_t new_capacity);
-static list_error_t ListVerify(list_type* list, int* position, const int pos1, const int pos2, const int check_position, const int check_size);
-static void ListDump(list_type* list, list_error_t error, const int pos, const char* message);
+static list_error_t ListVerify(list_type* list, ssize_t* position, const ssize_t pos1, const ssize_t pos2, const int check_position, const int check_size);
+static void ListDump(list_type* list, list_error_t error, const ssize_t pos, const char* message);
 
 
 list_error_t ListCtor(list_type* list, const char* name) {
@@ -35,14 +35,6 @@ list_error_t ListCtor(list_type* list, const char* name) {
     FILE* file_ = nullptr;
     StartLog(&file_, list->name);
     if (file_ == nullptr) {
-        free(list->data);
-        free(list->prev);
-        free(list->next);
-
-        list->data = nullptr;
-        list->prev = nullptr;
-        list->next = nullptr;
-
         return list_error_t::FILE_OPEN_ERROR;
     }
     list->file = file_;
@@ -50,19 +42,21 @@ list_error_t ListCtor(list_type* list, const char* name) {
 
     list->capacity = 0;
     list->size     = 0;
-
+/*
     list->prev = nullptr;
     list->data = nullptr;
     list->next = nullptr;
+*/
+    list->data = nullptr;
 
     list->free = -1;
 
     list_error_t error = ListSafeAllocationMemory(list, DEFAULT_CTOR_CAPACITY);
     if (error != list_error_t::OK) { return error; }
 
-    list->prev[0] = 0;
-    list->data[0] = DATA_POISON;
-    list->next[0] = 0;
+    UpdatePrev(list,  0, 0);
+    UpdateValue(list, 0, DATA_POISON);
+    UpdateNext(list,  0, 0);
 
     LIST_VERIFY_AND_RETURN(list, 1, 0, 2, 0, 0, "ERROR IN CTOR");
 
@@ -79,7 +73,7 @@ list_error_t ListDtor(list_type* list) {
     list->free     = 0;
     list->capacity = 0;
     list->size     = 0;
-
+/*
     free(list->data);
     free(list->prev);
     free(list->next);
@@ -87,26 +81,96 @@ list_error_t ListDtor(list_type* list) {
     list->data = nullptr;
     list->prev = nullptr;
     list->next = nullptr;
+*/
+    free(list->data);
+
+    list->data = nullptr;
 
     return list_error_t::OK;
 }
 
 //----------------------------------------------------------------------------------
 
-list_error_t ListChangeCapacity(list_type* list, const size_t new_capacity) {
-    return ListSafeAllocationMemory(list, new_capacity);
+list_error_t ListLinearize(list_type* list) {
+    LIST_VERIFY_AND_RETURN(list, 1, 0, 2, 0, 1, "ERROR BEFORE LINEARIZE");
+
+    /*
+    ssize_t* prev     = nullptr;
+    list_elem_t* data = nullptr;
+    ssize_t* next     = nullptr;
+
+    ARRAY_REALLOC_AND_RETURN(ssize_t,     prev, list->capacity);
+    ARRAY_REALLOC_AND_RETURN(list_elem_t, data, list->capacity);
+    ARRAY_REALLOC_AND_RETURN(ssize_t,     next, list->capacity);
+    */
+    list_data_type* buffer = nullptr;
+    ARRAY_REALLOC_AND_RETURN(list_data_type, buffer, list->capacity);
+
+    /*
+    prev[0] = (ssize_t)list->size);
+    data[0] = DATA_POISON);
+    next[0] = 1;
+    */
+    buffer[0] = {(ssize_t)list->size, DATA_POISON, 1};
+
+    ssize_t logic_pos = 1;
+
+    for (ssize_t pos = ListGetHead(list); pos != 0; pos = GetNext(list, pos)) {
+        /*
+        prev[logic_pos] = logic_pos - 1;
+        data[logic_pos] = GetValue(list, pos);
+        next[logic_pos] = logic_pos + 1;
+        */
+        buffer[logic_pos] = {logic_pos - 1, GetValue(list, pos), logic_pos + 1};
+
+        logic_pos++;
+    }
+    buffer[list->size].next = 0;
+
+    for (ssize_t pos = list->free; pos != INDX_POISON; pos = GetNext(list, pos)) {
+        /*
+        prev[logic_pos] = INDX_POISON);
+        data[logic_pos] = DATA_POISON);
+        next[logic_pos] = logic_pos + 1;
+        */
+        buffer[logic_pos] = {INDX_POISON, DATA_POISON, logic_pos + 1};
+
+        logic_pos++;
+    }
+    buffer[list->capacity].next = -1;
+
+    /*
+    free(list->prev);
+    free(list->data);
+    free(list->next);
+
+    list->prev = prev;
+    list->data = data;
+    list->next = next;
+    */
+    free(list->data);
+    list->data = buffer;
+
+    list->free = (ssize_t)list->size + 1;
+
+    LIST_VERIFY_AND_RETURN(list, 1, 0, 2, 0, 1, "ERROR AFTER LINEARIZE");
+
+    pos_color updated_els = {INDX_POISON, INDX_POISON, INDX_POISON, INDX_POISON};
+    ListLog(list, "LINEARIZE", list->file, &updated_els);
+
+    return list_error_t::OK;
 }
 
 //----------------------------------------------------------------------------------
 
-int ListGetHead(list_type* list) {
-    return list->next[0];
+ssize_t ListGetHead(list_type* list) {
+    return GetNext(list, 0);
 }
 
 //----------------------------------------------------------------------------------
 
-int ListGetTail(list_type* list) {
-    return list->prev[0];
+ssize_t ListGetTail(list_type* list) {
+    return GetPrev(list, 0);
 }
 
 //----------------------------------------------------------------------------------
@@ -117,157 +181,121 @@ void ListPrint(list_type* list, const char* message) {
 
 //----------------------------------------------------------------------------------
 
-list_error_t ListInsertBefore(list_type* list, const int position, const list_elem_t value) {
-    char message_ver_b[LOG_MESSAGE_SIZE] = {};
-    snprintf(message_ver_b, LOG_MESSAGE_SIZE, "INVALID LIST BEFORE EXECUTION INS(B)[%d]: %d ", position, value);
-    LIST_VERIFY_AND_RETURN(list, position, 1, (int)list->capacity, 1, 0, message_ver_b);
+list_error_t ListInsertBefore(list_type* list, const ssize_t position, const list_elem_t value) {
+    const ssize_t new_position = GetPrev(list, position);
 
-    if (list->size == list->capacity) {
-        list_error_t error = ListSafeAllocationMemory(list, list->capacity * 2);
-        if (error != list_error_t::OK) { return error; }
-    }
-
-    int prev_addr = list->prev[position];
-    int next_addr = position;
-    int free_addr = list->free;
-
-    FindFree(list);
-
-    pos_color updated_els = {INDX_POISON, free_addr, prev_addr, next_addr};
-
-    // Write new element
-    list->prev[free_addr] = prev_addr;
-    list->data[free_addr] = value;
-    list->next[free_addr] = next_addr;
-
-    // Update previous element's next
-    list->next[prev_addr] = free_addr;
-
-    // Update next element's previous
-    list->prev[next_addr] = free_addr;
-
-    list->size++;
-
-    char message_log[LOG_MESSAGE_SIZE] = {};
-    snprintf(message_log, LOG_MESSAGE_SIZE, "INSERT %d BEFORE POSITION: %d", value, position);
-    ListLog(list, message_log, list->file, &updated_els);
-
-    char message_ver_a[LOG_MESSAGE_SIZE] = {};
-    snprintf(message_ver_a, LOG_MESSAGE_SIZE, "INVALID LIST AFTER EXECUTION INS(B)[%d]: %d ", position, value);
-    LIST_VERIFY_AND_RETURN(list, position, 1, (int)list->capacity, 1, 0, message_ver_a);
-
-    return list_error_t::OK;
+    return ListInsertAfter(list, new_position, value);
 }
 
 //----------------------------------------------------------------------------------
 
-list_error_t ListInsertAfter(list_type* list, const int position, const list_elem_t value) {
+list_error_t ListInsertAfter(list_type* list, const ssize_t position, const list_elem_t value) {
     char message_ver_b[LOG_MESSAGE_SIZE] = {};
-    snprintf(message_ver_b, LOG_MESSAGE_SIZE, "INVALID LIST BEFORE EXECUTION INS(A)[%d]: %d ", position, value);
-    LIST_VERIFY_AND_RETURN(list, position, 0, (int)list->capacity, 1, 0, message_ver_b);
+    snprintf(message_ver_b, LOG_MESSAGE_SIZE, "INVALID LIST BEFORE EXECUTION INS(A)[%zd]: %d ", position, value);
+    LIST_VERIFY_AND_RETURN(list, position, 0, (ssize_t)list->capacity, 1, 0, message_ver_b);
 
     if (list->size == list->capacity) {
         list_error_t error = ListSafeAllocationMemory(list, list->capacity * 2);
         if (error != list_error_t::OK) { return error; }
     }
 
-    int prev_addr = position;
-    int next_addr = list->next[position];
-    int free_addr = list->free;
+    ssize_t prev_addr = position;
+    ssize_t next_addr = GetNext(list, position);
+    ssize_t free_addr = list->free;
 
     FindFree(list);
 
     pos_color updated_els = {INDX_POISON, free_addr, prev_addr, next_addr};
 
     // Write new element
-    list->prev[free_addr] = prev_addr;
-    list->data[free_addr] = value;
-    list->next[free_addr] = next_addr;
+    UpdatePrev(list,  free_addr, prev_addr);
+    UpdateValue(list, free_addr, value);
+    UpdateNext(list,  free_addr, next_addr);
 
     // Update previous element's next
-    list->next[prev_addr] = free_addr;
+    UpdateNext(list, prev_addr, free_addr);
 
     // Update next element's previous
-    list->prev[next_addr] = free_addr;
+    UpdatePrev(list, next_addr, free_addr);
 
     list->size++;
+
+    char message_ver_a[LOG_MESSAGE_SIZE] = {};
+    snprintf(message_ver_a, LOG_MESSAGE_SIZE, "INVALID LIST AFTER EXECUTION INS(A)[%zd]: %d ", position, value);
+    LIST_VERIFY_AND_RETURN(list, position, 0, (ssize_t)list->capacity, 1, 0, message_ver_a);
 
     char message[LOG_MESSAGE_SIZE] = {};
-    snprintf(message, LOG_MESSAGE_SIZE, "INSERT %d AFTER POSITION: %d", value, position);
+    snprintf(message, LOG_MESSAGE_SIZE, "INSERT %d AFTER POSITION: %zd", value, position);
     ListLog(list, message, list->file, &updated_els);
-
-    char message_ver_a[LOG_MESSAGE_SIZE] = {};
-    snprintf(message_ver_a, LOG_MESSAGE_SIZE, "INVALID LIST AFTER EXECUTION INS(A)[%d]: %d ", position, value);
-    LIST_VERIFY_AND_RETURN(list, position, 0, (int)list->capacity, 1, 0, message_ver_a);
 
     return list_error_t::OK;
 }
 
 //----------------------------------------------------------------------------------
 
-list_error_t ListRemove(list_type* list, const int position, list_elem_t* value) {
+list_error_t ListRemove(list_type* list, const ssize_t position, list_elem_t* value) {
     char message_ver_b[LOG_MESSAGE_SIZE] = {};
-    snprintf(message_ver_b, LOG_MESSAGE_SIZE, "INVALID LIST BEFORE EXECUTION REM[%d]", position);
-    LIST_VERIFY_AND_RETURN(list, position, 1, (int)list->capacity, 1, 1, message_ver_b);
+    snprintf(message_ver_b, LOG_MESSAGE_SIZE, "INVALID LIST BEFORE EXECUTION REM[%zd]", position);
+    LIST_VERIFY_AND_RETURN(list, position, 1, (ssize_t)list->capacity, 1, 1, message_ver_b);
 
-    int prev_addr = list->prev[position];
-    int next_addr = list->next[position];
+    ssize_t prev_addr = GetPrev(list, position);
+    ssize_t next_addr = GetNext(list, position);
 
-    *value = list->data[position];
+    *value = GetValue(list, position);;
 
     pos_color updated_els = {position, INDX_POISON, prev_addr, next_addr};
 
     // Remove element at position
-    list->prev[position] = INDX_POISON;
-    list->data[position] = DATA_POISON;
-    list->next[position] = INDX_POISON;
+    UpdatePrev(list,  position, INDX_POISON);
+    UpdateValue(list, position, DATA_POISON);
+    UpdateNext(list,  position, INDX_POISON);
 
     // Update previous element's next
-    list->next[prev_addr] = next_addr;
+    UpdateNext(list, prev_addr, next_addr);
 
     // Update next element's previous
-    list->prev[next_addr] = prev_addr;
+    UpdatePrev(list, next_addr, prev_addr);
 
     list->size--;
 
     AddFree(list, position);
 
-    char message[LOG_MESSAGE_SIZE] = {};
-    snprintf(message, LOG_MESSAGE_SIZE, "REMOVE ELEMENT ON POSITION: %d", position);
-    ListLog(list, message, list->file, &updated_els);
-
     char message_ver_a[LOG_MESSAGE_SIZE] = {};
-    snprintf(message_ver_a, LOG_MESSAGE_SIZE, "INVALID LIST AFTER EXECUTION REM[%d]", position);
-    LIST_VERIFY_AND_RETURN(list, position, 1, (int)list->capacity, 0, (int)list->size, message_ver_a);
+    snprintf(message_ver_a, LOG_MESSAGE_SIZE, "INVALID LIST AFTER EXECUTION REM[%zd]", position);
+    LIST_VERIFY_AND_RETURN(list, position, 1, (ssize_t)list->capacity, 0, (int)list->size, message_ver_a);
+
+    char message[LOG_MESSAGE_SIZE] = {};
+    snprintf(message, LOG_MESSAGE_SIZE, "REMOVE ELEMENT ON POSITION: %zd", position);
+    ListLog(list, message, list->file, &updated_els);
 
     return list_error_t::OK;
 }
 
 //----------------------------------------------------------------------------------
 
-static void FillListPoison(list_type* list, const size_t start, const size_t end) {
-    for (size_t pos = start; pos < end; pos++) {
-        list->prev[pos] = INDX_POISON;
-        list->data[pos] = DATA_POISON;
-        list->next[pos] = INDX_POISON;
+static void FillListPoison(list_type* list, const ssize_t start, const ssize_t end) {
+    for (ssize_t pos = start; pos < end; pos++) {
+        UpdatePrev(list,  pos, INDX_POISON);
+        UpdateValue(list, pos, DATA_POISON);
+        UpdateNext(list,  pos, INDX_POISON);
 
-        AddFree(list, (int)pos);
+        AddFree(list, pos);
     }
 }
 
 //----------------------------------------------------------------------------------
 
 static void FindFree(list_type* list) {
-    list->free = list->next[list->free];
+    list->free = GetNext(list, list->free);
 }
 
 //----------------------------------------------------------------------------------
 
-static void AddFree(list_type* list, const int position) {
+static void AddFree(list_type* list, const ssize_t position) {
     if (list->free < 1) {
-        list->next[position] = -1;
+        UpdateNext(list, position, -1);
     } else {
-        list->next[position] = list->free;
+        UpdateNext(list, position, list->free);
     }
     list->free = position;
 }
@@ -275,12 +303,14 @@ static void AddFree(list_type* list, const int position) {
 //----------------------------------------------------------------------------------
 
 static list_error_t ListSafeAllocationMemory(list_type* list, const size_t new_capacity) {
-
+/*
     ARRAY_REALLOC_AND_RETURN(list_elem_t, list->data, new_capacity);
-    ARRAY_REALLOC_AND_RETURN(int, list->prev, new_capacity);
-    ARRAY_REALLOC_AND_RETURN(int, list->next, new_capacity);
+    ARRAY_REALLOC_AND_RETURN(ssize_t, list->prev, new_capacity);
+    ARRAY_REALLOC_AND_RETURN(ssize_t, list->next, new_capacity);
+*/
+    ARRAY_REALLOC_AND_RETURN(list_data_type, list->data, new_capacity);
 
-    FillListPoison(list, 1 + list->capacity, new_capacity + 1);
+    FillListPoison(list, (ssize_t)(1 + list->capacity), (ssize_t)(new_capacity + 1));
 
     list->capacity = new_capacity;
 
@@ -289,35 +319,35 @@ static list_error_t ListSafeAllocationMemory(list_type* list, const size_t new_c
 
 //----------------------------------------------------------------------------------
 
-static list_error_t ListVerify(list_type* list, int* position, const int pos1, const int pos2, const int check_position, const int check_size) {
+static list_error_t ListVerify(list_type* list, ssize_t* position, const ssize_t pos1, const ssize_t pos2, const int check_position, const int check_size) {
     if (*position < pos1 || *position > pos2) {
         return list_error_t::INVALID_POSITION;
     }
     if (list->size > list->capacity) {
         return list_error_t::LIST_CORRUPTED;
     }
-    if (check_position == 1 && *position > 0 && list->data[*position] == DATA_POISON) {
+    if (check_position == 1 && *position > 0 && GetValue(list, *position) == DATA_POISON) {
         return list_error_t::POSITION_FREE;
     }
     if (check_size > 0 && list->size == 0) {
         return list_error_t::LIST_EMPTY;
     }
-    int pos      = 0;
+    ssize_t pos  = 0;
     size_t count = 0;
 
     while (true) {
-        pos = list->next[pos];
+        pos = GetNext(list, pos);
 
         if (pos == 0) { break; }
 
-        if (list->data[pos] == DATA_POISON) {
+        if (GetValue(list, pos) == DATA_POISON) {
             return list_error_t::INVALID_ELEMENT;
         }
-        if (list->prev[pos] > (int)list->capacity) {
+        if (GetPrev(list, pos) > (ssize_t)list->capacity) {
             *position = pos;
             return list_error_t::LIST_PREV_ADDR_ERROR;
         }
-        if (list->next[pos] > (int)list->capacity) {
+        if (GetNext(list, pos) > (ssize_t)list->capacity) {
             *position = pos;
             return list_error_t::LIST_NEXT_ADDR_ERROR;
         }
@@ -331,11 +361,12 @@ static list_error_t ListVerify(list_type* list, int* position, const int pos1, c
 
 //----------------------------------------------------------------------------------
 
-static void ListDump(list_type* list, list_error_t error, const int pos, const char* message) {
+static void ListDump(list_type* list, list_error_t error, const ssize_t pos, const char* message) {
     PRINT_COLOR(CYAN, "\n============LIST DUMP=============\n");
     if (error != list_error_t::OK) {
         PRINT_COLOR_VAR(RED, "ERROR: %s\n", ListErrorsArray[static_cast <int>(error)]);
     }
+    printf("COMMENT: %s\n", message);
     printf("List: %s\n\n", list->name);
     pos_color error_el = {INDX_POISON, INDX_POISON, INDX_POISON, INDX_POISON};
 
@@ -343,11 +374,11 @@ static void ListDump(list_type* list, list_error_t error, const int pos, const c
         case list_error_t::OK:
             printf("| ___HEAD___ | ___TAIL___ | ___FREE___ | ___SIZE___ | _CAPACITY_ |\n");
             printf("|");
-            PRINT_COLOR_VAR(GREEN, " %10d ", list->next[0]);
+            PRINT_COLOR_VAR(GREEN, " %10zd ", ListGetHead(list));
             printf("|");
-            PRINT_COLOR_VAR(GREEN, " %10d ", list->prev[0]);
+            PRINT_COLOR_VAR(GREEN, " %10zd ", ListGetTail(list));
             printf("|");
-            PRINT_COLOR_VAR(GREEN, " %10d ", list->free);
+            PRINT_COLOR_VAR(GREEN, " %10zd ", list->free);
             printf("|");
             PRINT_COLOR_VAR(GREEN, " %10zu ", list->size);
             printf("|");
@@ -368,18 +399,18 @@ static void ListDump(list_type* list, list_error_t error, const int pos, const c
         case list_error_t::INVALID_POSITION:
             printf("| ___HEAD___ | ___TAIL___ | ___FREE___ | ___SIZE___ | _CAPACITY_ |\n");
             printf("|");
-            PRINT_COLOR_VAR(GREEN, " %10d ", list->next[0]);
+            PRINT_COLOR_VAR(GREEN, " %10zd ", ListGetHead(list));
             printf("|");
-            PRINT_COLOR_VAR(GREEN, " %10d ", list->prev[0]);
+            PRINT_COLOR_VAR(GREEN, " %10zd ", ListGetTail(list));
             printf("|");
-            PRINT_COLOR_VAR(GREEN, " %10d ", list->free);
+            PRINT_COLOR_VAR(GREEN, " %10zd ", list->free);
             printf("|");
             PRINT_COLOR_VAR(GREEN, " %10zu ", list->size);
             printf("|");
             PRINT_COLOR_VAR(GREEN, " %10zu ", list->capacity);
             printf("|");
             printf("\n\n");
-            PRINT_COLOR_VAR(RED, "CALLED POSITION: %d\n", pos);
+            PRINT_COLOR_VAR(RED, "CALLED POSITION: %zd\n", pos);
             printf("DUMP NUMBER: %zu\n", list->dump_count);
             error_el.posR = pos;
             ListLog(list, message, list->file, &error_el);
@@ -387,11 +418,11 @@ static void ListDump(list_type* list, list_error_t error, const int pos, const c
         case list_error_t::INVALID_ELEMENT:
             printf("| ___HEAD___ | ___TAIL___ | ___FREE___ | ___SIZE___ | _CAPACITY_ |\n");
             printf("|");
-            PRINT_COLOR_VAR(GREEN, " %10d ", list->next[0]);
+            PRINT_COLOR_VAR(GREEN, " %10zd ", ListGetHead(list));
             printf("|");
-            PRINT_COLOR_VAR(GREEN, " %10d ", list->prev[0]);
+            PRINT_COLOR_VAR(GREEN, " %10zd ", ListGetTail(list));
             printf("|");
-            PRINT_COLOR_VAR(GREEN, " %10d ", list->free);
+            PRINT_COLOR_VAR(GREEN, " %10zd ", list->free);
             printf("|");
             PRINT_COLOR_VAR(GREEN, " %10zu ", list->size);
             printf("|");
@@ -405,18 +436,18 @@ static void ListDump(list_type* list, list_error_t error, const int pos, const c
         case list_error_t::POSITION_FREE:
             printf("| ___HEAD___ | ___TAIL___ | ___FREE___ | ___SIZE___ | _CAPACITY_ |\n");
             printf("|");
-            PRINT_COLOR_VAR(GREEN, " %10d ", list->next[0]);
+            PRINT_COLOR_VAR(GREEN, " %10zd ", ListGetHead(list));
             printf("|");
-            PRINT_COLOR_VAR(GREEN, " %10d ", list->prev[0]);
+            PRINT_COLOR_VAR(GREEN, " %10zd ", ListGetTail(list));
             printf("|");
-            PRINT_COLOR_VAR(GREEN, " %10d ", list->free);
+            PRINT_COLOR_VAR(GREEN, " %10zd ", list->free);
             printf("|");
             PRINT_COLOR_VAR(GREEN, " %10zu ", list->size);
             printf("|");
             PRINT_COLOR_VAR(GREEN, " %10zu", list->capacity);
             printf("|");
             printf("\n\n");
-            PRINT_COLOR_VAR(RED, "ELEMENT %d = POISON\n", pos);
+            PRINT_COLOR_VAR(RED, "ELEMENT %zd = POISON\n", pos);
             printf("DUMP NUMBER: %zu\n", list->dump_count);
             error_el.posR = pos;
             ListLog(list, message, list->file, &error_el);
@@ -424,11 +455,11 @@ static void ListDump(list_type* list, list_error_t error, const int pos, const c
         case list_error_t::LIST_SIZE_ERROR:
             printf("| ___HEAD___ | ___TAIL___ | ___FREE___ | ___SIZE___ | _CAPACITY_ |\n");
             printf("|");
-            PRINT_COLOR_VAR(GREEN, " %10d ", list->next[0]);
+            PRINT_COLOR_VAR(GREEN, " %10zd ", ListGetHead(list));
             printf("|");
-            PRINT_COLOR_VAR(GREEN, " %10d ", list->prev[0]);
+            PRINT_COLOR_VAR(GREEN, " %10zd ", ListGetTail(list));
             printf("|");
-            PRINT_COLOR_VAR(GREEN, " %10d ", list->free);
+            PRINT_COLOR_VAR(GREEN, " %10zd ", list->free);
             printf("|");
             PRINT_COLOR_VAR(RED, " %10zu ", list->size);
             printf("|");
@@ -443,11 +474,11 @@ static void ListDump(list_type* list, list_error_t error, const int pos, const c
         case list_error_t::LIST_CORRUPTED:
             printf("| ___HEAD___ | ___TAIL___ | ___FREE___ | ___SIZE___ | _CAPACITY_ |\n");
             printf("|");
-            PRINT_COLOR_VAR(GREEN, " %10d ", list->next[0]);
+            PRINT_COLOR_VAR(GREEN, " %10zd ", ListGetHead(list));
             printf("|");
-            PRINT_COLOR_VAR(GREEN, " %10d ", list->prev[0]);
+            PRINT_COLOR_VAR(GREEN, " %10zd ", ListGetTail(list));
             printf("|");
-            PRINT_COLOR_VAR(GREEN, " %10d ", list->free);
+            PRINT_COLOR_VAR(GREEN, " %10zd ", list->free);
             printf("|");
             PRINT_COLOR_VAR(RED, " %10zu ", list->size);
             printf("|");
@@ -460,11 +491,11 @@ static void ListDump(list_type* list, list_error_t error, const int pos, const c
         case list_error_t::LIST_EMPTY:
             printf("| ___HEAD___ | ___TAIL___ | ___FREE___ | ___SIZE___ | _CAPACITY_ |\n");
             printf("|");
-            PRINT_COLOR_VAR(GREEN, " %10d ", list->next[0]);
+            PRINT_COLOR_VAR(GREEN, " %10zd ", ListGetHead(list));
             printf("|");
-            PRINT_COLOR_VAR(GREEN, " %10d ", list->prev[0]);
+            PRINT_COLOR_VAR(GREEN, " %10zd ", ListGetTail(list));
             printf("|");
-            PRINT_COLOR_VAR(GREEN, " %10d ", list->free);
+            PRINT_COLOR_VAR(GREEN, " %10zd ", list->free);
             printf("|");
             PRINT_COLOR_VAR(GREEN, " %10zu ", list->size);
             printf("|");
@@ -477,20 +508,20 @@ static void ListDump(list_type* list, list_error_t error, const int pos, const c
         case list_error_t::LIST_PREV_ADDR_ERROR:
             printf("| ___HEAD___ | ___TAIL___ | ___FREE___ | ___SIZE___ | _CAPACITY_ |\n");
             printf("|");
-            PRINT_COLOR_VAR(GREEN, " %10d ", list->next[0]);
+            PRINT_COLOR_VAR(GREEN, " %10zd ", ListGetHead(list));
             printf("|");
-            PRINT_COLOR_VAR(GREEN, " %10d ", list->prev[0]);
+            PRINT_COLOR_VAR(GREEN, " %10zd ", ListGetTail(list));
             printf("|");
-            PRINT_COLOR_VAR(GREEN, " %10d ", list->free);
+            PRINT_COLOR_VAR(GREEN, " %10zd ", list->free);
             printf("|");
             PRINT_COLOR_VAR(GREEN, " %10zu ", list->size);
             printf("|");
             PRINT_COLOR_VAR(GREEN, " %10zu ", list->capacity);
             printf("|");
             printf("\n\n");
-            printf("FOR ELEMENT: %d\n", pos);
-            printf("INVALID PREVIOUS ADDRESS: ");
-            PRINT_COLOR_VAR(RED, "%d\n", list->prev[pos]);
+            printf("FOR ELEMENT: %zd\n", pos);
+            printf("INVALID PREVIOUS ELEMENT: ");
+            PRINT_COLOR_VAR(RED, "%zd\n", GetPrev(list, pos));
             printf("DUMP NUMBER: %zu\n", list->dump_count);
             error_el.posR = pos;
             ListLog(list, message, list->file, &error_el);
@@ -498,20 +529,20 @@ static void ListDump(list_type* list, list_error_t error, const int pos, const c
         case list_error_t::LIST_NEXT_ADDR_ERROR:
             printf("| ___HEAD___ | ___TAIL___ | ___FREE___ | ___SIZE___ | _CAPACITY_ |\n");
             printf("|");
-            PRINT_COLOR_VAR(GREEN, " %10d ", list->next[0]);
+            PRINT_COLOR_VAR(GREEN, " %10zd ", ListGetHead(list));
             printf("|");
-            PRINT_COLOR_VAR(GREEN, " %10d ", list->prev[0]);
+            PRINT_COLOR_VAR(GREEN, " %10zd ", ListGetTail(list));
             printf("|");
-            PRINT_COLOR_VAR(GREEN, " %10d ", list->free);
+            PRINT_COLOR_VAR(GREEN, " %10zd ", list->free);
             printf("|");
             PRINT_COLOR_VAR(GREEN, " %10zu ", list->size);
             printf("|");
             PRINT_COLOR_VAR(GREEN, " %10zu ", list->capacity);
             printf("|");
             printf("\n\n");
-            printf("FOR ELEMENT: %d\n", pos);
-            printf("INVALID NEXT ADDRESS: ");
-            PRINT_COLOR_VAR(RED, "%d\n", list->next[pos]);
+            printf("FOR ELEMENT: %zd\n", pos);
+            printf("INVALID NEXT ELEMENT: ");
+            PRINT_COLOR_VAR(RED, "%zd\n", GetNext(list, pos));
             printf("DUMP NUMBER: %zu\n", list->dump_count);
             error_el.posR = pos;
             ListLog(list, message, list->file, &error_el);
