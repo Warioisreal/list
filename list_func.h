@@ -1,19 +1,24 @@
 #ifndef _LIST_FUNC_H_
 #define _LIST_FUNC_H_
 
-#include "define_lib.h"
-
 #include "logger.h"
 #include "list.h"
 
 
-#define PRINT_LIST_ELEMENT(prev, elem, next) printf("%lld | %d | %lld\n", prev, elem, next)
+#define PRINT_LIST_ELEMENT(prev, elem, next) printf("%zd | %d | %zd\n", prev, elem, next)
 
-#define MAKE_LIST(name) list_type name = {}; \
-                        char full_folder_name[LOG_FOLDER_NAME_SIZE] = ""; \
-                        GetFullFolderName(#name, full_folder_name); \
-                        UpdateFolder(full_folder_name); \
-                        ListCtor(&name, #name)
+#ifdef DEBUG
+    #define CALL_UPDATE_FOLDER(folder)
+#else
+    #define CALL_UPDATE_FOLDER(folder) UpdateFolder(folder)
+#endif
+
+#define MAKE_LIST(name) \
+    list_type name = {}; \
+    char full_folder_name[LOG_FOLDER_NAME_SIZE] = ""; \
+    GetFullFolderName(#name, full_folder_name); \
+    CALL_UPDATE_FOLDER(full_folder_name); \
+    ListCtor(&name, #name)
 
 list_error_t ListCtor(list_type* list, const char* name);
 list_error_t ListDtor(list_type* list);

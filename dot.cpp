@@ -11,13 +11,13 @@ void StartDot(FILE* file_dot) {
 //----------------------------------------------------------------------------------
 
 void MakeDotElement(FILE* file_dot, const ssize_t node_number, const char* params) {
-    fprintf(file_dot, "node%zd [%s];\n", node_number, params);
+    fprintf(file_dot, "node%zX [%s];\n", node_number, params);
 }
 
 //----------------------------------------------------------------------------------
 
 void MakeDotElementConnection(FILE* file_dot, const ssize_t position1, const ssize_t position2, const char* params) {
-    fprintf(file_dot, "node%zd -> node%zd [%s];\n", position1, position2, params);
+    fprintf(file_dot, "node%zX -> node%zX [%s];\n", position1, position2, params);
 }
 
 //----------------------------------------------------------------------------------

@@ -1,13 +1,36 @@
 #include <stdio.h>
-#include <stdlib.h>
 
 #include "color_lib.h"
 
+#include "classic_list.h"
 #include "list_func.h"
 #include "unit_tests.h"
 
 
-#define CHECK_ERRORS(error) if (error != list_error_t::OK) { return; }
+#define CHECK_ERRORS(error)         if (error != list_error_t::OK) { return; }
+#define CHECK_ERRORS_CLASSIC(error) if (error != error_t::OK)      { return; }
+
+void UTclassic(void) {
+    MAKE_CLASSIC_LIST(lst_clsc);
+
+    CHECK_ERRORS_CLASSIC(ClassicListInsertAfter(&lst_clsc, lst_clsc.fict_elem, 10));
+    CHECK_ERRORS_CLASSIC(ClassicListInsertAfter(&lst_clsc, lst_clsc.fict_elem, 20));
+    CHECK_ERRORS_CLASSIC(ClassicListInsertAfter(&lst_clsc, lst_clsc.fict_elem, 30));
+    CHECK_ERRORS_CLASSIC(ClassicListInsertAfter(&lst_clsc, lst_clsc.fict_elem, 40));
+    CHECK_ERRORS_CLASSIC(ClassicListInsertAfter(&lst_clsc, lst_clsc.fict_elem, 50));
+    CHECK_ERRORS_CLASSIC(ClassicListInsertAfter(&lst_clsc, lst_clsc.fict_elem, 60));
+
+    CHECK_ERRORS_CLASSIC(ClassicListDtor(&lst_clsc));
+
+    printf("\n" " ========================== " "\n"
+                "|                          |" "\n"
+                "| UNIT TEST classic FINISH |" "\n"
+                "|                          |" "\n"
+                " ========================== " "\n"
+           "\n");
+}
+
+//----------------------------------------------------------------------------------
 
 void UT1(void) {
     MAKE_LIST(lst1);
@@ -185,6 +208,7 @@ void UT6(void) {
            "\n");
 }
 
+//----------------------------------------------------------------------------------
 
 void UT7(void) {
     MAKE_LIST(lst7);
@@ -197,9 +221,8 @@ void UT7(void) {
     CHECK_ERRORS(ListInsertAfter(&lst7, 8, 60));
 
     ListPrint(&lst7, "NORMAL LIST");
-
-    lst7.data[3].prev = 600;
-    lst7.data[3].next = 700;
+    UpdatePrev(&lst7, 3, 600);
+    UpdateNext(&lst7, 3, 700);
 
     ListPrint(&lst7, "(1) REPLACE NODE3(prev) on 600<br>(2) REPLACE NODE3(next) on 700");
 
@@ -212,3 +235,48 @@ void UT7(void) {
                 " ==================== " "\n"
            "\n");
 }
+
+//----------------------------------------------------------------------------------
+
+void TestSoA(int elements_count) {
+    list_elem_t value = 0;
+
+    MAKE_LIST(lst_soa);
+
+    for (int i = 0; i < elements_count; i++) {
+        CHECK_ERRORS(ListInsertAfter(&lst_soa, 0, i * 10));
+    }
+    for (int i = 0; i < elements_count; i++) {
+        CHECK_ERRORS(ListRemove(&lst_soa, ListGetTail(&lst_soa), &value));
+    }
+    CHECK_ERRORS(ListDtor(&lst_soa));
+}
+
+void TestAoS(int elements_count) {
+    list_elem_t value = 0;
+
+    MAKE_LIST(lst_aos);
+
+    for (int i = 0; i < elements_count; i++) {
+        CHECK_ERRORS(ListInsertAfter(&lst_aos, 0, i * 10));
+    }
+    for (int i = 0; i < elements_count; i++) {
+        CHECK_ERRORS(ListRemove(&lst_aos, ListGetTail(&lst_aos), &value));
+    }
+    CHECK_ERRORS(ListDtor(&lst_aos));
+}
+
+void TestClassic(int elements_count) {
+    list_elem_t value = 0;
+
+    MAKE_CLASSIC_LIST(lst_classic);
+
+    for (int i = 0; i < elements_count; i++) {
+        CHECK_ERRORS_CLASSIC(ClassicListInsertAfter(&lst_classic, lst_classic.fict_elem, i * 10));
+    }
+    for (int i = 0; i < elements_count; i++) {
+        CHECK_ERRORS_CLASSIC(ClassicListRemove(&lst_classic, ClassicListGetTail(&lst_classic), &value));
+    }
+    CHECK_ERRORS_CLASSIC(ClassicListDtor(&lst_classic));
+}
+

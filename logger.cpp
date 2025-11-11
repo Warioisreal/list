@@ -267,3 +267,236 @@ void ListLog(list_type* list, const char* message, FILE* file, pos_color* positi
         filename_dot
     );
 }
+
+//----------------------------------------------------------------------------------
+
+void ClassicListLog(List* list, const char* message, FILE* file, elems_color* elems) {
+    char filename_dot[DOT_FILE_NAME_SIZE] = "";
+    snprintf(filename_dot, DOT_FILE_NAME_SIZE, "%s_%s/push_dot_%s_%zu.txt", LOG_FOLDER, list->name, list->name, list->dump_count);
+    FILE* file_dot = fopen(filename_dot, "wb");
+    StartDot(file_dot);
+
+    unsigned int color    = 0;
+    unsigned int bg_color = 0;
+    ClassicListElement* elem = list->fict_elem;
+    do {
+        if (elem == elems->posR) {
+            color    = 0xc00000;
+            bg_color = 0xf0a0a0;
+        } else
+        if (elem == elems->posG){
+            color    = 0x00c000;
+            bg_color = 0xa0f0a0;
+        } else
+        if (elem == elems->posY1 || elem == elems->posY2) {
+            color    = 0xc0c000;
+            bg_color = 0xf0f0a0;
+        } else
+        if (elem == list->fict_elem) {
+            color    = 0x0000c0;
+            bg_color = 0xa0a0f0;
+        } else {
+            color    = 0xa0c0a0;
+            bg_color = 0xe0f0e0;
+        }
+
+        char extra_label[DOT_PARAMS_SIZE] = "";
+        if (elem == list->fict_elem->next) {
+            snprintf(extra_label, 100, "%s%s", extra_label, "HEAD | ");
+        }
+        if (elem == list->fict_elem->prev) {
+            snprintf(extra_label, 100, "%s%s", extra_label, "TAIL | ");
+        }
+
+        char params[DOT_PARAMS_SIZE] = "";
+        snprintf(
+            params,
+            300,
+            "color=\"#%06X\", fillcolor=\"#%06X\", penwidth=\"2\", label=\"%s %zX | value = %d | { prev \\n %zX | next \\n %zX}\"",
+            color,
+            bg_color,
+            extra_label,
+            (size_t)elem,
+            elem->value,
+            (size_t)elem->prev,
+            (size_t)elem->next);
+        MakeDotElement(file_dot, (ssize_t)elem, params);
+
+        elem = elem->next;
+    } while (elem != list->fict_elem);
+
+    elem = list->fict_elem;
+    do {
+        MakeDotElementConnection(file_dot, (ssize_t)elem, (ssize_t)elem->next, "style=invis, weight=100");
+        elem = elem->next;
+    } while (elem->next != list->fict_elem);
+
+    elem = list->fict_elem->next;
+    do {
+        // draw prev and next
+        if (elem->value != POISON && \
+            elem->next != nullptr && \
+            elem->next->value != POISON && \
+            elem == elem->next->prev)
+        {
+            MakeDotElementConnection(file_dot, (ssize_t)elem, (ssize_t)elem->next, "constraint=false, weight=0, color=\"#000000\", dir=both");
+        }
+        // draw prev xor next
+        if (((elem->prev->next != elem) != \
+            (elem->next->prev != elem)) || \
+            elem->prev == list->fict_elem || \
+            elem->next == list->fict_elem)
+        {
+            // draw prev
+            if (elem->prev != nullptr && (elem->prev == list->fict_elem || (elem != elem->prev->next)) && elem->value != POISON) {
+                MakeDotElementConnection(file_dot, (ssize_t)elem, (ssize_t)elem->prev, "constraint=false, weight=0, color=\"#0000ff\"");
+                if (elem->prev->next != elem) {
+                    char params[300] = "";
+                    snprintf(params, 300, "shape=\"octagon\", color=\"#ff0000\", fillcolor=\"#ffc0c0\", penwidth=\"2\", label=\" %zX \"", (size_t)elem->prev);
+                    MakeDotElement(file_dot, (ssize_t)elem->prev, params);
+                }
+            }
+            // draw next
+            if (elem->next != nullptr && (elem->next == list->fict_elem || (elem != elem->next->prev)) && elem->value != POISON) {
+                MakeDotElementConnection(file_dot, (ssize_t)elem, (ssize_t)elem->next, "constraint=false, weight=0, color=\"#ff0000\"");
+                if (elem->next->prev != elem) {
+                    char params[300] = "";
+                    snprintf(params, 300, "shape=\"octagon\", color=\"#ff0000\", fillcolor=\"#ffc0c0\", penwidth=\"2\", label=\" %zX \"", (size_t)elem->next);
+                    MakeDotElement(file_dot, (ssize_t)elem->next, params);
+                }
+            }
+        }
+
+        elem = elem->next;
+    } while (elem != list->fict_elem);
+
+    FinishDot(file_dot);
+
+    char command[COMMAND_SIZE] = "";
+    snprintf(command, COMMAND_SIZE, "dot -Tsvg %s_%s/push_dot_%s_%zu.txt -o %s_%s/push_dot_%s_%zu.svg", LOG_FOLDER, list->name, list->name, list->dump_count, LOG_FOLDER, list->name, list->name, list->dump_count);
+    system(command);
+
+    fprintf(file,
+        "<div style=\"margin: 20px; padding: 15px; border: 2px solid #4CAF50; border-radius: 10px; background: #f8f9fa; box-shadow: 0 4px 8px rgba(0,0,0,0.1);\">\n"
+            "<h2 style=\"color: #2E86AB; margin-top: 0;\">List \"%s\" Debug %zu</h2>\n"
+            "<h2 style=\"margin-top: 0;\">%s</h2>\n"
+            "<div style=\"display: table;\">\n"
+                "<div style=\"width: 20%%;\">\n"
+                    "<h3 style=\"color: #A23B72;\">Parameters</h3>\n"
+                    "<table style=\"width: 100%%; border-collapse: collapse;\">\n"
+                        "<tr style=\"background: #e9ecef;\">"
+                            "<td style=\"padding: 8px; border: 1px solid #ddd; font-weight: bold;\">HEAD</td>"
+                            "<td style=\"padding: 8px; border: 1px solid #ddd;\">%zX</td>"
+                        "</tr>\n"
+                        "<tr>"
+                            "<td style=\"padding: 8px; border: 1px solid #ddd; font-weight: bold;\">TAIL</td>"
+                            "<td style=\"padding: 8px; border: 1px solid #ddd;\">%zX</td>"
+                        "</tr>\n"
+                        "<tr style=\"background: #e9ecef;\">"
+                            "<td style=\"padding: 8px; border: 1px solid #ddd; font-weight: bold;\">SIZE</td>"
+                            "<td style=\"padding: 8px; border: 1px solid #ddd;\">%zu</td>"
+                        "</tr>\n"
+                    "</table>\n"
+                "</div>\n",
+        list->name,
+        list->dump_count,
+        message,
+        (size_t)list->fict_elem->next,
+        (size_t)list->fict_elem->prev,
+        list->size);
+
+    fprintf(file,
+        "<div style=\"margin-top: 10px;\">\n"
+        "<h3 style=\"color: #A23B72;\">List Array Representation</h3>\n"
+        "<pre style=\"background: #f0f0f0; width: fit-content; padding: 10px; border: 1px solid #ccc; border-radius: 5px;\">\n");
+
+    // index
+    fprintf(file, "index: |");
+    elem = list->fict_elem;
+    do {
+        fprintf(file, " %10zX |", (size_t)elem);
+        elem = elem->next;
+    } while (elem != list->fict_elem);
+    fprintf(file, "\n");
+
+    fprintf(file, "-------|");
+    elem = list->fict_elem;
+    do {
+        fprintf(file, "------------|");
+        elem = elem->next;
+    } while (elem != list->fict_elem);
+    fprintf(file, "\n");
+
+    // data
+    fprintf(file, "value: |");
+    elem = list->fict_elem;
+    do {
+        if (elem->value == POISON) {
+            fprintf(file, " %10s |", "poison");
+        } else {
+            fprintf(file, " %10d |", elem->value);
+        }
+        elem = elem->next;
+    } while (elem != list->fict_elem);
+    fprintf(file, "\n");
+
+    fprintf(file, "-------|");
+    elem = list->fict_elem;
+    do {
+        fprintf(file, "------------|");
+        elem = elem->next;
+    } while (elem != list->fict_elem);
+    fprintf(file, "\n");
+
+    // prev
+    fprintf(file, " prev: |");
+    elem = list->fict_elem;
+    do {
+        if (elem->prev == nullptr) {
+            fprintf(file, " %10s |", "poison");
+        } else {
+            fprintf(file, " %10zX |", (size_t)elem->prev);
+        }
+        elem = elem->next;
+    } while (elem != list->fict_elem);
+    fprintf(file, "\n");
+
+    fprintf(file, "-------|");
+    elem = list->fict_elem;
+    do {
+        fprintf(file, "------------|");
+        elem = elem->next;
+    } while (elem != list->fict_elem);
+    fprintf(file, "\n");
+
+    // next
+    fprintf(file, " next: |");
+    elem = list->fict_elem;
+    do {
+        if (elem->next == nullptr) {
+            fprintf(file, " %10s |", "poison");
+        } else {
+            fprintf(file, " %10zX |", (size_t)elem->next);
+        }
+        elem = elem->next;
+    } while (elem != list->fict_elem);
+    fprintf(file, "\n");
+
+    fprintf(file, "</pre>\n</div>\n");
+
+    fprintf(file,
+                "<div style=\"min-width: 40%%;\">\n"
+                    "<h3 style=\"color: #A23B72;\">Visualization</h3>\n"
+                    "<img src=\"%s_%s/push_dot_%s_%zu.svg\" style=\"max-width: 100%%; height: auto; border: 1px solid #ddd; border-radius: 5px;\" alt=\"List visualization\">\n"
+                "</div>\n"
+            "</div>\n"
+            "<hr style=\"margin: 15px 0; border: 0; border-top: 1px solid #ccc;\">\n"
+            "<small style=\"color: #666;\">Generated from: %s</small>\n"
+        "</div>\n\n",
+        LOG_FOLDER,
+        list->name,
+        list->name,
+        list->dump_count++,
+        filename_dot
+    );
+}
